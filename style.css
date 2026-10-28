@@ -1,0 +1,2222 @@
+/* ============================================================================
+ * st-app-layout · style.css
+ * 酒馆 APP 布局 · Stage 1 (v0.4.0)
+ *
+ * 设计原则（需求文档「需求九 / 通用注意」）：
+ *   1. 只管布局：位置、层级、显示隐藏、新建导航结构。
+ *   2. 不管配色：所有颜色一律继承 --SmartTheme* 变量，不写死色值。
+ *   3. 全部规则挂在 body.st-app-on 下：移除该 class = 100% 恢复原生界面。
+ *   4. 自建层级全部 > 9999（酒馆窄屏 .draggable 规则是 z-index:9999）。
+ *   5. 原生容器「保留渲染但不可见」，绝不 display:none 掉 drawer 容器。
+ * ============================================================================ */
+
+:root {
+    /* ---- 尺寸 ---- */
+    --st-app-topbar-h: 52px;
+    --st-app-tabbar-h: 58px;
+    --st-app-radius: 16px;
+
+    /* ---- 安全区（iPhone 刘海 / 手势条） ---- */
+    --st-app-safe-t: env(safe-area-inset-top, 0px);
+    --st-app-safe-b: env(safe-area-inset-bottom, 0px);
+    --st-app-safe-l: env(safe-area-inset-left, 0px);
+    --st-app-safe-r: env(safe-area-inset-right, 0px);
+
+    /* ---- 配色：全部继承当前主题，禁止写死 ---- */
+    --st-app-fg: var(--SmartThemeBodyColor);
+    --st-app-surface: var(--SmartThemeBlurTintColor);
+    --st-app-border: var(--SmartThemeBorderColor);
+    --st-app-accent: var(--SmartThemeEmColor);
+
+    /* ---- 层级体系（内容 < 导航 < 遮罩 < 弹层 < 原生抽屉 < 返回钮 < 错误条）
+     *      原生上限 9999，故自建层从 10010 起。
+     *      原生 <dialog> popup 在 top-layer，永远在最上面，不受影响。 ---- */
+    --st-app-z-content: 10010;
+    --st-app-z-topbar: 10015;
+    --st-app-z-nav: 10020;
+    --st-app-z-mask: 10030;
+    --st-app-z-sheet: 10040;
+    --st-app-z-version: 10050;
+    --st-app-z-drawer-back: 10061;
+    --st-app-z-error: 10070;
+}
+
+/* ============================================================================
+ * 1. 根容器
+ * ========================================================================== */
+
+#st-app-root {
+    position: fixed;
+    inset: 0;
+    z-index: var(--st-app-z-content) !important;
+    display: none;
+    color: var(--st-app-fg);
+    /* 默认不吃事件，命中区域由各子层单独开启，避免聊天界面挡住原生交互 */
+    pointer-events: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body.st-app-on #st-app-root {
+    display: block;
+}
+
+/* 列表页时禁掉整页滚动，滚动交给内部列表 */
+body.st-app-on:not(.st-app-chat) {
+    overflow: hidden !important;
+}
+
+/* ============================================================================
+ * 2. 一级页面（Tab 页）
+ * ========================================================================== */
+
+#st-app-pages {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    padding-top: var(--st-app-safe-t);
+    padding-left: var(--st-app-safe-l);
+    padding-right: var(--st-app-safe-r);
+    pointer-events: auto;
+    background-color: var(--st-app-surface);
+    background-color: color-mix(in srgb, var(--st-app-surface) 90%, transparent);
+    -webkit-backdrop-filter: blur(var(--SmartThemeBlurStrength));
+    backdrop-filter: blur(var(--SmartThemeBlurStrength));
+}
+
+/* 聊天二级页：页面层整体让位给酒馆原生 #sheld */
+body.st-app-chat #st-app-pages {
+    display: none;
+}
+
+.st-app-page {
+    display: none;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.st-app-page.active {
+    display: flex;
+}
+
+.st-app-page-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px 8px;
+    flex: none;
+}
+
+.st-app-page-title {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: 0.01em;
+}
+
+.st-app-version-chip {
+    font-size: 10px;
+    font-weight: 500;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--st-app-border);
+    border-color: color-mix(in srgb, var(--st-app-border) 60%, transparent);
+    opacity: 0.55;
+    white-space: nowrap;
+}
+
+.st-app-page-head .st-app-icon-btn {
+    margin-left: auto;
+}
+
+/* ---- 滚动列表 ---- */
+.st-app-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 4px 10px calc(var(--st-app-tabbar-h) + var(--st-app-safe-b) + 20px);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+#st-app-settings-list {
+    gap: 0;
+}
+
+/* ---- 图标按钮 ---- */
+.st-app-icon-btn {
+    appearance: none;
+    -webkit-appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--st-app-fg);
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.st-app-icon-btn:hover {
+    background-color: color-mix(in srgb, var(--st-app-surface) 60%, var(--st-app-fg) 12%);
+}
+
+.st-app-icon-btn:active {
+    transform: scale(0.94);
+}
+
+.st-app-ico {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    flex: none;
+}
+
+.st-app-ico svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* ============================================================================
+ * 3. 聊天记录列表
+ * ========================================================================== */
+
+#st-app-chat-list {
+    gap: 2px;
+}
+
+.st-app-chat-item {
+    appearance: none;
+    -webkit-appearance: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 66px;
+    padding: 9px 12px;
+    border: 0;
+    border-radius: 14px;
+    background: transparent;
+    color: inherit;
+    text-align: start;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.st-app-chat-item:hover,
+.st-app-chat-item:focus-visible {
+    background-color: color-mix(in srgb, var(--st-app-surface) 55%, var(--st-app-fg) 10%);
+    outline: none;
+}
+
+.st-app-chat-item:active {
+    background-color: color-mix(in srgb, var(--st-app-surface) 45%, var(--st-app-fg) 16%);
+}
+
+.st-app-chat-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.st-app-chat-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+}
+
+.st-app-chat-name {
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.st-app-chat-time {
+    margin-left: auto;
+    font-size: 11px;
+    opacity: 0.55;
+    white-space: nowrap;
+    flex: none;
+}
+
+.st-app-chat-preview {
+    font-size: 13px;
+    line-height: 1.35;
+    opacity: 0.62;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ---- 头像（含首字兜底） ---- */
+.st-app-avatar-wrap {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    flex: none;
+    border-radius: 50%;
+    overflow: hidden;
+    background-color: color-mix(in srgb, var(--st-app-surface) 70%, var(--st-app-fg) 14%);
+}
+
+.st-app-avatar-wrap.sm {
+    width: 34px;
+    height: 34px;
+}
+
+.st-app-avatar-wrap img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+.st-app-avatar-fallback {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 100%;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--st-app-accent);
+    opacity: 0.9;
+    user-select: none;
+}
+
+.st-app-avatar-wrap.sm .st-app-avatar-fallback {
+    font-size: 14px;
+}
+
+/* 图片加载失败 → 首字兜底（JS 加 is-fallback） */
+.st-app-avatar-wrap.is-fallback img {
+    display: none;
+}
+
+/* 未加 is-fallback 时兜底文字被图片盖住即可 */
+.st-app-avatar-wrap:not(.is-fallback) .st-app-avatar-fallback {
+    visibility: hidden;
+}
+
+/* ---- 空状态 / 加载 / 错误 ---- */
+.st-app-empty {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 48px 24px 96px;
+    text-align: center;
+}
+
+.st-app-empty .st-app-ico {
+    width: 44px;
+    height: 44px;
+    opacity: 0.35;
+}
+
+.st-app-empty-title {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.st-app-empty-sub {
+    font-size: 13px;
+    opacity: 0.6;
+    max-width: 300px;
+    line-height: 1.55;
+}
+
+.st-app-empty .st-app-btn {
+    margin-top: 6px;
+}
+
+/* ---- 按钮 ---- */
+.st-app-btn {
+    appearance: none;
+    -webkit-appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 40px;
+    padding: 0 16px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--st-app-border) 80%, transparent);
+    background-color: color-mix(in srgb, var(--st-app-surface) 80%, var(--st-app-fg) 8%);
+    color: var(--st-app-fg);
+    font-size: 14px;
+    cursor: pointer;
+    transition: filter 0.15s ease;
+}
+
+.st-app-btn:hover {
+    filter: brightness(1.12);
+}
+
+.st-app-btn-accent {
+    border-color: transparent;
+    background-color: color-mix(in srgb, var(--st-app-accent) 22%, transparent);
+    color: var(--st-app-accent);
+}
+
+/* ============================================================================
+ * 4. 底部 Tab 导航
+ * ========================================================================== */
+
+#st-app-tabbar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: var(--st-app-z-nav) !important;
+    display: flex;
+    align-items: stretch;
+    height: calc(var(--st-app-tabbar-h) + var(--st-app-safe-b));
+    padding: 0 var(--st-app-safe-r) var(--st-app-safe-b) var(--st-app-safe-l);
+    pointer-events: auto;
+    background-color: var(--st-app-surface);
+    background-color: color-mix(in srgb, var(--st-app-surface) 92%, transparent);
+    -webkit-backdrop-filter: blur(var(--SmartThemeBlurStrength));
+    backdrop-filter: blur(var(--SmartThemeBlurStrength));
+    border-top: 1px solid color-mix(in srgb, var(--st-app-border) 55%, transparent);
+}
+
+/* 聊天二级页不显示底部 Tab */
+body.st-app-chat #st-app-tabbar {
+    display: none;
+}
+
+.st-app-tab {
+    appearance: none;
+    -webkit-appearance: none;
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-height: 44px;
+    padding: 5px 2px;
+    border: 0;
+    background: transparent;
+    color: var(--st-app-fg);
+    opacity: 0.5;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.st-app-tab:hover {
+    opacity: 0.75;
+}
+
+.st-app-tab.active {
+    opacity: 1;
+    color: var(--st-app-accent);
+}
+
+.st-app-tab-icon-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px 14px;
+    border-radius: 999px;
+    transition: background-color 0.18s ease;
+}
+
+.st-app-tab.active .st-app-tab-icon-wrap {
+    background-color: color-mix(in srgb, var(--st-app-accent) 14%, transparent);
+}
+
+.st-app-tab .st-app-ico {
+    width: 23px;
+    height: 23px;
+}
+
+.st-app-tab-label {
+    line-height: 1;
+}
+
+.st-app-tab[aria-disabled='false'] {
+    cursor: pointer;
+}
+
+/* ============================================================================
+ * 5. 聊天二级页：顶部栏（返回 + 头像 + 角色名 + 更多）
+ * ========================================================================== */
+
+#st-app-chat-topbar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    z-index: var(--st-app-z-topbar) !important;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    min-height: calc(var(--st-app-topbar-h) + var(--st-app-safe-t));
+    padding: calc(var(--st-app-safe-t) + 4px) calc(var(--st-app-safe-r) + 6px) 4px calc(var(--st-app-safe-l) + 6px);
+    pointer-events: auto;
+    background-color: var(--st-app-surface);
+    background-color: color-mix(in srgb, var(--st-app-surface) 90%, transparent);
+    -webkit-backdrop-filter: blur(var(--SmartThemeBlurStrength));
+    backdrop-filter: blur(var(--SmartThemeBlurStrength));
+    border-bottom: 1px solid color-mix(in srgb, var(--st-app-border) 55%, transparent);
+}
+
+body.st-app-chat #st-app-chat-topbar {
+    display: flex;
+}
+
+.st-app-chat-id {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.st-app-chat-id-text {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.st-app-chat-id-name {
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.st-app-chat-id-sub {
+    font-size: 11px;
+    line-height: 1.2;
+    opacity: 0.55;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ============================================================================
+ * 6. 底部弹层（⋯ 菜单 / 诊断 / Token 统计）
+ * ========================================================================== */
+
+#st-app-sheet-mask {
+    position: absolute;
+    inset: 0;
+    z-index: var(--st-app-z-mask) !important;
+    display: none;
+    background-color: var(--black50a);
+    opacity: 0;
+    transition: opacity 0.18s ease;
+    pointer-events: auto;
+}
+
+#st-app-sheet-mask.open {
+    display: block;
+    opacity: 1;
+}
+
+#st-app-sheet {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: var(--st-app-z-sheet) !important;
+    display: flex;
+    flex-direction: column;
+    max-height: 74dvh;
+    padding: 6px 0 calc(var(--st-app-safe-b) + 10px);
+    border-top: 1px solid color-mix(in srgb, var(--st-app-border) 70%, transparent);
+    border-radius: 18px 18px 0 0;
+    background-color: var(--st-app-surface);
+    background-color: color-mix(in srgb, var(--st-app-surface) 96%, transparent);
+    -webkit-backdrop-filter: blur(var(--SmartThemeBlurStrength));
+    backdrop-filter: blur(var(--SmartThemeBlurStrength));
+    color: var(--st-app-fg);
+    box-shadow: 0 -8px 30px var(--black50a);
+    transform: translateY(104%);
+    transition: transform 0.24s cubic-bezier(0.22, 0.8, 0.28, 1);
+    pointer-events: none;
+    visibility: hidden;
+}
+
+#st-app-sheet.open {
+    transform: translateY(0);
+    pointer-events: auto;
+    visibility: visible;
+}
+
+.st-app-sheet-handle {
+    width: 38px;
+    height: 4px;
+    margin: 4px auto 6px;
+    border-radius: 999px;
+    background-color: var(--st-app-fg);
+    opacity: 0.2;
+    flex: none;
+}
+
+.st-app-sheet-title {
+    padding: 0 18px 8px;
+    font-size: 13px;
+    font-weight: 600;
+    opacity: 0.6;
+    flex: none;
+}
+
+.st-app-sheet-body {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 8px 4px;
+    min-height: 0;
+}
+
+.st-app-sheet-row {
+    appearance: none;
+    -webkit-appearance: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 48px;
+    padding: 11px 12px;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    color: inherit;
+    font-size: 15px;
+    text-align: start;
+    cursor: pointer;
+}
+
+.st-app-sheet-row:hover,
+.st-app-sheet-row:focus-visible {
+    background-color: color-mix(in srgb, var(--st-app-surface) 55%, var(--st-app-fg) 10%);
+    outline: none;
+}
+
+.st-app-sheet-row .st-app-ico {
+    width: 21px;
+    height: 21px;
+    opacity: 0.8;
+}
+
+.st-app-sheet-row-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.st-app-sheet-row-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.st-app-sheet-row-sub {
+    font-size: 12px;
+    opacity: 0.55;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.st-app-sheet-row-chevron {
+    margin-left: auto;
+    opacity: 0.35;
+    flex: none;
+}
+
+.st-app-sheet-divider {
+    height: 1px;
+    margin: 6px 14px;
+    background-color: var(--st-app-border);
+    opacity: 0.5;
+}
+
+/* ============================================================================
+ * 7. 设置页（Stage 1 最小集合：布局开关 / 诊断 / 版本）
+ * ========================================================================== */
+
+.st-app-group {
+    display: flex;
+    flex-direction: column;
+    margin: 6px 4px 10px;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--st-app-border) 45%, transparent);
+    background-color: color-mix(in srgb, var(--st-app-surface) 70%, transparent);
+}
+
+.st-app-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 56px;
+    padding: 12px 14px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: start;
+    font-size: 15px;
+}
+
+.st-app-row + .st-app-row {
+    border-top: 1px solid color-mix(in srgb, var(--st-app-border) 35%, transparent);
+}
+
+.st-app-row-btn {
+    cursor: pointer;
+}
+
+.st-app-row-btn:hover {
+    background-color: color-mix(in srgb, var(--st-app-surface) 50%, var(--st-app-fg) 8%);
+}
+
+.st-app-row-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.st-app-row-title {
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.3;
+}
+
+.st-app-row-sub {
+    font-size: 12px;
+    opacity: 0.55;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.st-app-row-value {
+    font-size: 13px;
+    opacity: 0.6;
+    max-width: 45%;
+    text-align: end;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.st-app-group-title {
+    padding: 12px 18px 4px;
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0.5;
+    letter-spacing: 0.04em;
+}
+
+/* ---- 开关 ---- */
+.st-app-switch {
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    flex: none;
+    width: 46px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background-color: color-mix(in srgb, var(--st-app-fg) 24%, transparent);
+    cursor: pointer;
+    transition: background-color 0.18s ease;
+}
+
+.st-app-switch::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background-color: var(--st-app-surface);
+    background-color: color-mix(in srgb, var(--st-app-surface) 88%, var(--st-app-fg) 12%);
+    box-shadow: 0 1px 3px var(--black50a);
+    transition: transform 0.18s cubic-bezier(0.22, 0.8, 0.28, 1);
+}
+
+.st-app-switch.on {
+    background-color: color-mix(in srgb, var(--st-app-accent) 60%, transparent);
+}
+
+.st-app-switch.on::after {
+    transform: translateX(18px);
+}
+
+/* ---- 占位页 ---- */
+.st-app-placeholder {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 40px 28px calc(var(--st-app-tabbar-h) + 60px);
+    text-align: center;
+}
+
+.st-app-placeholder .st-app-ico {
+    width: 46px;
+    height: 46px;
+    opacity: 0.32;
+}
+
+.st-app-placeholder-title {
+    font-size: 17px;
+    font-weight: 600;
+}
+
+.st-app-placeholder-sub {
+    font-size: 13px;
+    line-height: 1.6;
+    opacity: 0.6;
+    max-width: 300px;
+}
+
+.st-app-badge {
+    display: inline-block;
+    margin-top: 2px;
+    font-size: 11px;
+    padding: 2px 9px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--st-app-border) 60%, transparent);
+    opacity: 0.7;
+}
+
+/* ============================================================================
+ * 8. 原生抽屉：统一二级页接管（内容被搬进 #st-app-native-page，不再抬原生层级）
+ * ========================================================================== */
+
+/* ============================================================================
+ * 9. 错误提示条（插件出问题时不静默失败）
+ * ========================================================================== */
+
+#st-app-error-banner {
+    position: fixed;
+    left: max(10px, env(safe-area-inset-left, 0px));
+    right: max(10px, env(safe-area-inset-right, 0px));
+    top: calc(env(safe-area-inset-top, 0px) + 10px);
+    z-index: var(--st-app-z-error) !important;
+    display: none;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid var(--crimson70a);
+    background-color: var(--SmartThemeBlurTintColor);
+    background-color: color-mix(in srgb, var(--crimson70a) 22%, var(--SmartThemeBlurTintColor) 78%);
+    color: var(--SmartThemeBodyColor);
+    font-size: 13px;
+    line-height: 1.45;
+    box-shadow: 0 6px 24px var(--black50a);
+}
+
+#st-app-error-banner.show {
+    display: flex;
+}
+
+#st-app-error-banner .st-app-error-main {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+#st-app-error-banner .st-app-error-title {
+    font-weight: 700;
+    margin-bottom: 2px;
+}
+
+#st-app-error-banner .st-app-error-text {
+    opacity: 0.85;
+    overflow-wrap: anywhere;
+    max-height: 6.5em;
+    overflow: hidden;
+}
+
+#st-app-error-banner .st-app-error-close {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    opacity: 0.7;
+}
+
+#st-app-error-banner .st-app-error-close:hover {
+    opacity: 1;
+}
+
+/* 启用插件后仍可见的小版本角标（不挡操作） */
+#st-app-version-badge {
+    position: fixed;
+    right: calc(var(--st-app-safe-r) + 6px);
+    bottom: calc(var(--st-app-safe-b) + var(--st-app-tabbar-h) + 4px);
+    z-index: var(--st-app-z-version) !important;
+    display: none;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background-color: var(--st-app-surface);
+    background-color: color-mix(in srgb, var(--st-app-surface) 75%, transparent);
+    color: var(--st-app-fg);
+    font-size: 10px;
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+body.st-app-on:not(.st-app-chat) #st-app-version-badge {
+    display: block;
+}
+
+/* ============================================================================
+ * 10. 让位给酒馆原生聊天 DOM（不重画，只调整位置/可见性）
+ * ========================================================================== */
+
+/* 列表页：原生 #sheld 保留渲染但不可见（visibility 而不是 display:none，
+ * 保证酒馆内部对 #sheld 的尺寸/交互逻辑仍然正常） */
+body.st-app-on:not(.st-app-chat) #sheld {
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
+/* 聊天页：原生聊天容器满屏，顶部/底部让出安全区 */
+body.st-app-on.st-app-chat #sheld {
+    visibility: visible;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    min-height: 100dvh !important;
+    width: 100dvw !important;
+    z-index: 30;
+    /* 保证纵向弹性布局：主题若改 #sheld display 会被这里纠正 */
+    display: flex !important;
+    flex-direction: column !important;
+    /* 消灭底部空隙：PWA 模式给 #sheld 加了 padding-bottom:15px+，某些主题也加 → 归零 */
+    padding-bottom: 0 !important;
+    margin-bottom: 0 !important;
+}
+
+/* 隐藏原生拖拽手柄（APP 布局里没有桌面窗口拖拽概念） */
+body.st-app-on.st-app-chat #sheldheader {
+    display: none !important;
+}
+
+/* 消息流：必须撑满剩余高度，否则输入栏会被顶上去、底部留空 */
+body.st-app-on.st-app-chat #chat {
+    padding-top: calc(var(--st-app-topbar-h) + var(--st-app-safe-t) + 8px) !important;
+    padding-bottom: 4px !important;
+    flex: 1 1 0% !important;
+    min-height: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+}
+
+/* 输入栏：消灭底部空隙 —— 归零主题/PWA/Safari 的额外 margin/padding，只保留安全区 */
+body.st-app-on.st-app-chat #form_sheld {
+    flex: 0 0 auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+}
+
+body.st-app-on.st-app-chat #send_form {
+    margin: 0 !important;
+    padding-bottom: max(var(--st-app-safe-b), 0px) !important;
+    border-radius: 0 !important;
+}
+
+/* 聊天视图下 body 自身的 padding/margin 也归零（部分主题会给 body 加内边距） */
+body.st-app-on.st-app-chat {
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* 聊天页隐藏原生顶栏（按钮不可见，但 .drawer / .drawer-content 容器保留渲染，
+ * 这样抽屉逻辑仍然有效；点⋯时把 #top-settings-holder 抬到最上层即可） */
+body.st-app-on #top-bar {
+    display: none !important;
+}
+
+/* 原生顶栏在 APP 模式下物理折叠（所有一级页面 + 聊天页统一）：
+ * 不再依赖 z 轴硬扛，从而根治「窄屏时原生顶栏把插件盖住 / 顶栏反过来出现」
+ * 这类主题或移动端 z-index 打架问题。.drawer / .drawer-content 容器保留渲染
+ * （绝不用 display:none 抹掉），抽屉逻辑依然有效。 */
+body.st-app-on #top-settings-holder {
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    z-index: 3005 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: 0 !important;
+}
+
+body.st-app-on #top-settings-holder > .drawer > .drawer-toggle {
+    display: none !important;
+}
+
+/* 防御：任何主题 / MovingUI 给 #sheld 加的 transform 都会创建新的包含块，
+ * 可能把依赖视口定位的层带跑；APP 模式下强制复位。同时把 z 钉死防止被抬高。 */
+body.st-app-on #sheld {
+    transform: none !important;
+    z-index: 30 !important;
+}
+
+/* ============================================================================
+ * 11. 窄屏双保险：显式压制 @media (max-width:1000px) 的 .draggable 全屏规则
+ * ----------------------------------------------------------------------------
+ * 酒馆 style.css:6092 在 ≤1000px 时把任意 .draggable 强制成
+ * width:100vw; height:100vh; z-index:9999 —— 这是 MOMO 旧版翻车的核心原因
+ * （gallery / memory / group-chats / quick-reply 的浮层都带这个类）。
+ * 我们的自建层已经全部 >9999，这里再把 APP 模式下这条规则关掉，双保险。
+ * ========================================================================== */
+
+@media screen and (max-width: 1000px) {
+    body.st-app-on .draggable {
+        width: auto;
+        height: auto;
+        z-index: auto;
+    }
+}
+
+/* ============================================================================
+ * 12. 大屏 / 平板 / 桌面窗口：收成居中的 APP 外壳，窄屏永远满宽
+ * ========================================================================== */
+
+@media screen and (min-width: 900px) {
+    #st-app-pages,
+    #st-app-chat-topbar,
+    #st-app-tabbar,
+    #st-app-sheet {
+        left: max(0px, calc(50% - 380px)) !important;
+        right: max(0px, calc(50% - 380px)) !important;
+    }
+
+    #st-app-tabbar {
+        border-radius: 18px 18px 0 0;
+        border-left: 1px solid color-mix(in srgb, var(--st-app-border) 45%, transparent);
+        border-right: 1px solid color-mix(in srgb, var(--st-app-border) 45%, transparent);
+    }
+
+    #st-app-chat-topbar {
+        border-left: 1px solid color-mix(in srgb, var(--st-app-border) 45%, transparent);
+        border-right: 1px solid color-mix(in srgb, var(--st-app-border) 45%, transparent);
+        border-radius: 0 0 0 0;
+    }
+
+    body.st-app-on.st-app-chat #sheld {
+        left: max(0px, calc(50% - 380px)) !important;
+        right: max(0px, calc(50% - 380px)) !important;
+        width: auto !important;
+        border-left: 1px solid color-mix(in srgb, var(--st-app-border) 45%, transparent);
+        border-right: 1px solid color-mix(in srgb, var(--st-app-border) 45%, transparent);
+    }
+}
+
+/* 矮屏（横屏手机）：收一点高度 */
+@media screen and (max-height: 520px) {
+    :root {
+        --st-app-topbar-h: 46px;
+        --st-app-tabbar-h: 52px;
+    }
+
+    .st-app-page-head {
+        padding-top: 8px;
+        padding-bottom: 4px;
+    }
+
+    #st-app-sheet {
+        max-height: 88dvh;
+    }
+}
+
+/* ============================================================================
+ * 13. 无模糊模式 / 减少动效 / 高对比度
+ * ========================================================================== */
+
+body.no-blur #st-app-pages,
+body.no-blur #st-app-tabbar,
+body.no-blur #st-app-chat-topbar,
+body.no-blur #st-app-sheet {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background-color: var(--st-app-surface);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #st-app-tabbar *,
+    #st-app-chat-topbar *,
+    #st-app-sheet,
+    #st-app-sheet-mask,
+    .st-app-switch,
+    .st-app-switch::after {
+        transition: none !important;
+        animation: none !important;
+    }
+}
+
+/* 键盘导航可见焦点 */
+body.st-app-on :focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--st-app-accent) 80%, transparent);
+    outline-offset: 2px;
+}
+
+/* ============================================================================
+ * 14. Stage 2：角色 Tab（搜索 / 卡片网格 / 导入 FAB）
+ * ========================================================================== */
+
+.st-app-page {
+    position: relative;
+}
+
+.st-app-search {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 36px;
+    padding: 0 12px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--st-app-border) 70%, transparent);
+    background-color: color-mix(in srgb, var(--st-app-surface) 60%, transparent);
+    color: var(--st-app-fg);
+    font-size: 14px;
+    outline: none;
+}
+
+.st-app-search::placeholder {
+    opacity: 0.5;
+}
+
+.st-app-char-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+    padding: 4px 12px calc(var(--st-app-tabbar-h) + var(--st-app-safe-b) + 74px);
+    align-content: start;
+}
+
+.st-app-char-card {
+    appearance: none;
+    -webkit-appearance: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 14px 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--st-app-border) 45%, transparent);
+    border-radius: 16px;
+    background-color: color-mix(in srgb, var(--st-app-surface) 72%, transparent);
+    color: var(--st-app-fg);
+    cursor: pointer;
+    text-align: center;
+    transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.st-app-char-card:hover {
+    background-color: color-mix(in srgb, var(--st-app-surface) 55%, var(--st-app-fg) 8%);
+}
+
+.st-app-char-card:active {
+    transform: scale(0.97);
+}
+
+.st-app-char-card-avatar {
+    width: 64px;
+    height: 64px;
+    font-size: 24px;
+}
+
+.st-app-char-card-name {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.3;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.st-app-char-card-tags {
+    display: flex;
+    gap: 4px;
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.st-app-tag {
+    display: inline-block;
+    font-size: 11px;
+    line-height: 1;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--st-app-border) 60%, transparent);
+    color: var(--st-app-fg);
+    opacity: 0.75;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+/* 导入 FAB（右下角悬浮） */
+.st-app-fab {
+    appearance: none;
+    -webkit-appearance: none;
+    position: absolute;
+    right: calc(var(--st-app-safe-r) + 18px);
+    bottom: calc(var(--st-app-safe-b) + var(--st-app-tabbar-h) + 18px);
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    border: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--st-app-accent);
+    background-color: color-mix(in srgb, var(--st-app-accent) 82%, var(--st-app-surface) 18%);
+    color: var(--st-app-fg);
+    cursor: pointer;
+    box-shadow: 0 6px 20px var(--black50a);
+    transition: transform 0.12s ease, filter 0.15s ease;
+}
+
+.st-app-fab:hover {
+    filter: brightness(1.12);
+}
+
+.st-app-fab:active {
+    transform: scale(0.92);
+}
+
+.st-app-fab .st-app-ico {
+    width: 26px;
+    height: 26px;
+}
+
+/* ============================================================================
+ * 15. Stage 2：角色概括弹窗
+ * ========================================================================== */
+
+.st-app-charsheet-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 2px 4px 12px;
+}
+
+.st-app-avatar-wrap.lg {
+    width: 72px;
+    height: 72px;
+    flex: none;
+}
+
+.st-app-avatar-wrap.lg .st-app-avatar-fallback {
+    font-size: 28px;
+}
+
+.st-app-charsheet-info {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.st-app-charsheet-name {
+    font-size: 19px;
+    font-weight: 700;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+.st-app-charsheet-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.st-app-charsheet-desc {
+    font-size: 14px;
+    line-height: 1.6;
+    opacity: 0.85;
+    max-height: 30vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 4px 2px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.st-app-charsheet-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding: 12px 2px 4px;
+}
+
+.st-app-charsheet-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 9px 6px;
+    border-radius: 12px;
+    border: 1px solid color-mix(in srgb, var(--st-app-border) 45%, transparent);
+    background-color: color-mix(in srgb, var(--st-app-surface) 60%, transparent);
+    text-align: center;
+    min-width: 0;
+}
+
+.st-app-charsheet-stat-k {
+    font-size: 11px;
+    opacity: 0.55;
+}
+
+.st-app-charsheet-stat-v {
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.st-app-charsheet-actions {
+    display: flex;
+    gap: 10px;
+    padding: 10px 2px 2px;
+}
+
+.st-app-charsheet-actions .st-app-btn {
+    flex: 1 1 0;
+    min-height: 46px;
+    font-size: 15px;
+}
+
+/* ============================================================================
+ * 16. Stage 2：设置二级页（UI 主题）+ 主题色
+ * ========================================================================== */
+
+.st-app-subpage {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    z-index: 5;
+    background-color: var(--st-app-surface);
+    background-color: color-mix(in srgb, var(--st-app-surface) 96%, transparent);
+    -webkit-backdrop-filter: blur(var(--SmartThemeBlurStrength));
+    backdrop-filter: blur(var(--SmartThemeBlurStrength));
+}
+
+.st-app-subpage.open {
+    display: flex;
+}
+
+.st-app-subpage-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: calc(var(--st-app-safe-t) + 8px) 12px 8px;
+    border-bottom: 1px solid color-mix(in srgb, var(--st-app-border) 45%, transparent);
+    flex: none;
+}
+
+.st-app-subpage-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 8px 10px calc(var(--st-app-safe-b) + 24px);
+}
+
+.st-app-row-col {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 10px;
+}
+
+.st-app-accent-picker {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 2px 0 4px;
+}
+
+.st-app-accent-swatch {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: 2px solid color-mix(in srgb, var(--st-app-border) 55%, transparent);
+    background-color: var(--swatch, var(--st-app-accent));
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 0.12s ease;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.st-app-accent-swatch:hover {
+    transform: scale(1.08);
+}
+
+.st-app-accent-swatch.active {
+    outline: 2px solid var(--st-app-fg);
+    outline-offset: 2px;
+}
+
+/* 弹层内嵌原生主题块时给它留白 */
+.st-app-subpage-body #UI-Theme-Block {
+    padding: 8px;
+}
+
+/* 矮屏弹窗更紧凑 */
+@media screen and (max-height: 520px) {
+    .st-app-charsheet-desc {
+        max-height: 22vh;
+    }
+}
+
+/* ============================================================================
+ * 17. 主题系统 v2（v0.6.0）
+ * ----------------------------------------------------------------------------
+ * 兼容性原则：
+ *   1. 所有颜色 token 默认映射酒馆 --SmartTheme* 变量 —— 换任何第三方纯配色
+ *      主题，本插件 UI 自动跟随，无需任何 JS。
+ *   2. 皮肤只覆盖「本插件新建的导航层」的结构性 tokens（表面/线/圆角/阴影/
+ *      模糊/密度），绝不碰 .mes 气泡等原生元素配色。
+ *   3. 性能预算：backdrop-filter 全插件最多 4 处（页面/顶栏/Tab栏/弹层），
+ *      且仅玻璃/夜光皮肤启用；列表项零模糊零重阴影；长列表 content-visibility。
+ * ========================================================================== */
+
+:root {
+    /* ---- 颜色 tokens：默认 = 酒馆主题变量（第三方主题兼容点） ---- */
+    --st-app-tint: var(--SmartThemeBlurTintColor);
+    --st-app-fg: var(--SmartThemeBodyColor);
+    --st-app-line: color-mix(in srgb, var(--SmartThemeBorderColor) 50%, transparent);
+    --st-app-line-soft: color-mix(in srgb, var(--SmartThemeBorderColor) 26%, transparent);
+
+    /* ---- 表面系列（皮肤覆盖） ---- */
+    --st-app-surface-0: var(--st-app-tint);
+    --st-app-surface-1: color-mix(in srgb, var(--st-app-tint) 84%, transparent);
+    --st-app-surface-2: color-mix(in srgb, var(--st-app-tint) 60%, var(--st-app-fg) 5%);
+    --st-app-surface-3: color-mix(in srgb, var(--st-app-tint) 90%, transparent);
+
+    /* ---- 强调系列 ---- */
+    --st-app-accent: var(--SmartThemeEmColor);
+    --st-app-accent-soft: color-mix(in srgb, var(--st-app-accent) 15%, transparent);
+    --st-app-accent-grad: linear-gradient(135deg,
+            color-mix(in srgb, var(--st-app-accent) 94%, var(--st-app-fg) 6%),
+            color-mix(in srgb, var(--st-app-accent) 62%, transparent) 150%);
+    --st-app-on-accent: color-mix(in srgb, var(--st-app-fg) 80%, var(--st-app-accent) 20%);
+
+    /* ---- 文字层级 ---- */
+    --st-app-muted: color-mix(in srgb, var(--st-app-fg) 58%, transparent);
+    --st-app-faint: color-mix(in srgb, var(--st-app-fg) 36%, transparent);
+
+    /* ---- 尺寸/圆角/阴影/密度（JS 可写入 scale） ---- */
+    --st-app-radius-scale: 1;
+    --st-app-density: 1;
+    --st-app-radius-s: calc(9px * var(--st-app-radius-scale));
+    --st-app-radius-m: calc(14px * var(--st-app-radius-scale));
+    --st-app-radius-l: calc(20px * var(--st-app-radius-scale));
+    --st-app-shadow-s: 0 1px 2px var(--black30a);
+    --st-app-shadow-m: 0 8px 26px var(--black50a);
+    --st-app-focus-ring: 0 0 0 3px var(--st-app-accent-soft);
+
+    /* ---- 旧变量别名（让既有组件自动吃到新 tokens） ---- */
+    --st-app-surface: var(--st-app-surface-1);
+    --st-app-border: var(--st-app-line);
+    --st-app-radius: var(--st-app-radius-m);
+    --st-app-topbar-h: calc(52px * var(--st-app-density));
+    --st-app-tabbar-h: calc(58px * var(--st-app-density));
+}
+
+/* ================= 皮肤 ================= */
+
+body.st-app-skin-glass {
+    --st-app-surface-1: color-mix(in srgb, var(--st-app-tint) 82%, transparent);
+    --st-app-surface-2: color-mix(in srgb, var(--st-app-tint) 56%, transparent);
+    --st-app-surface-3: color-mix(in srgb, var(--st-app-tint) 88%, transparent);
+    --st-app-blur: 1;
+}
+
+body.st-app-skin-paper {
+    --st-app-surface-1: color-mix(in srgb, var(--st-app-tint) 96%, var(--st-app-fg) 3%);
+    --st-app-surface-2: color-mix(in srgb, var(--st-app-tint) 90%, var(--st-app-fg) 6%);
+    --st-app-surface-3: color-mix(in srgb, var(--st-app-tint) 99%, var(--st-app-fg) 2%);
+    --st-app-line: color-mix(in srgb, var(--SmartThemeBorderColor) 62%, transparent);
+    --st-app-blur: 0;
+}
+
+body.st-app-skin-minimal {
+    --st-app-surface-1: var(--st-app-tint);
+    --st-app-surface-2: color-mix(in srgb, var(--st-app-tint) 86%, var(--st-app-fg) 6%);
+    --st-app-surface-3: var(--st-app-tint);
+    --st-app-shadow-s: none;
+    --st-app-shadow-m: none;
+    --st-app-blur: 0;
+}
+
+body.st-app-skin-neon {
+    --st-app-surface-1: color-mix(in srgb, var(--st-app-tint) 84%, var(--st-app-accent) 5%);
+    --st-app-surface-2: color-mix(in srgb, var(--st-app-tint) 62%, var(--st-app-accent) 8%);
+    --st-app-surface-3: color-mix(in srgb, var(--st-app-tint) 90%, var(--st-app-accent) 5%);
+    --st-app-line: color-mix(in srgb, var(--st-app-accent) 24%, transparent);
+    --st-app-blur: 1;
+}
+
+/* 毛玻璃总开关（低端机/用户偏好）：强制不透明 + 关模糊（后置覆盖皮肤） */
+body.st-app-flat {
+    --st-app-blur: 0;
+    --st-app-surface-1: var(--st-app-tint);
+    --st-app-surface-2: color-mix(in srgb, var(--st-app-tint) 90%, var(--st-app-fg) 6%);
+    --st-app-surface-3: var(--st-app-tint);
+}
+
+/* 模糊只应用于 4 个主表面，且仅玻璃/夜光皮肤 + 未被 no-blur/flat 关闭 */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    body.st-app-skin-glass:not(.no-blur):not(.st-app-flat) > #st-app-root #st-app-pages,
+    body.st-app-skin-glass:not(.no-blur):not(.st-app-flat) > #st-app-root #st-app-tabbar,
+    body.st-app-skin-glass:not(.no-blur):not(.st-app-flat) > #st-app-root #st-app-chat-topbar,
+    body.st-app-skin-glass:not(.no-blur):not(.st-app-flat) > #st-app-root #st-app-sheet,
+    body.st-app-skin-neon:not(.no-blur):not(.st-app-flat) > #st-app-root #st-app-pages,
+    body.st-app-skin-neon:not(.no-blur):not(.st-app-flat) > #st-app-root #st-app-tabbar,
+    body.st-app-skin-neon:not(.no-blur):not(.st-app-flat) > #st-app-root #st-app-chat-topbar,
+    body.st-app-skin-neon:not(.no-blur):not(.st-app-flat) > #st-app-root #st-app-sheet {
+        -webkit-backdrop-filter: blur(var(--SmartThemeBlurStrength));
+        backdrop-filter: blur(var(--SmartThemeBlurStrength));
+    }
+}
+
+/* 纸感 / 极简 / 毛玻璃关闭：强制整棵 UI 无模糊（性能预算：全局 ≤4 处且仅玻璃/夜光有） */
+body.st-app-skin-paper > #st-app-root *,
+body.st-app-skin-minimal > #st-app-root *,
+body.st-app-flat > #st-app-root * {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+}
+
+/* no-blur（酒馆全局关模糊）同样覆盖 */
+body.no-blur > #st-app-root * {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+}
+
+/* ================= 组件接入 tokens（视觉精修） ================= */
+
+body.st-app-on #st-app-pages,
+body.st-app-on #st-app-tabbar,
+body.st-app-on #st-app-chat-topbar,
+body.st-app-on #st-app-sheet {
+    background-color: var(--st-app-surface-1);
+    border-color: var(--st-app-line);
+}
+
+.st-app-chat-item,
+.st-app-sheet-row,
+.st-app-row,
+.st-app-group,
+.st-app-char-card {
+    background-color: var(--st-app-surface-2);
+    border-color: var(--st-app-line-soft);
+    border-radius: var(--st-app-radius-m);
+}
+
+.st-app-char-card {
+    border-radius: var(--st-app-radius-l);
+}
+
+#st-app-sheet {
+    background-color: var(--st-app-surface-3);
+    box-shadow: var(--st-app-shadow-m);
+}
+
+#st-app-sheet-mask {
+    background-color: var(--black50a);
+}
+
+.st-app-avatar-fallback {
+    background: linear-gradient(150deg,
+            color-mix(in srgb, var(--st-app-accent) 52%, var(--st-app-tint)),
+            color-mix(in srgb, var(--st-app-accent) 18%, var(--st-app-tint)));
+    color: var(--st-app-fg);
+}
+
+.st-app-tab.active .st-app-tab-icon-wrap {
+    background: var(--st-app-accent-grad);
+    color: var(--st-app-fg);
+    box-shadow: var(--st-app-shadow-s);
+}
+
+body.st-app-skin-neon .st-app-tab.active .st-app-tab-icon-wrap,
+body.st-app-skin-neon .st-app-fab {
+    box-shadow: 0 0 16px var(--st-app-accent-soft), 0 4px 14px var(--black50a);
+}
+
+.st-app-fab {
+    background-color: var(--st-app-accent);
+    background-image: var(--st-app-accent-grad);
+    color: var(--st-app-fg);
+    box-shadow: var(--st-app-shadow-m);
+}
+
+.st-app-page-title {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+
+.st-app-empty .st-app-ico {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: var(--st-app-accent-soft);
+    color: var(--st-app-accent);
+    opacity: 0.9;
+}
+
+.st-app-chat-item:active,
+.st-app-sheet-row:active,
+.st-app-row-btn:active {
+    transform: scale(0.99);
+    filter: brightness(1.06);
+}
+
+.st-app-char-card:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--st-app-shadow-s);
+}
+
+.st-app-char-card:active {
+    transform: scale(0.97);
+}
+
+.st-app-chat-item,
+.st-app-char-card {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 76px;
+}
+
+.st-app-char-card {
+    contain-intrinsic-size: auto 156px;
+}
+
+body.st-app-on ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+body.st-app-on ::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+body.st-app-on ::-webkit-scrollbar-thumb {
+    background: var(--st-app-line);
+    border-radius: 999px;
+}
+
+body.st-app-on ::-webkit-scrollbar-thumb:hover {
+    background: var(--st-app-muted);
+}
+
+.st-app-accent-swatch {
+    background-color: var(--swatch, var(--st-app-accent));
+    color: var(--st-app-fg);
+    text-shadow: 0 1px 2px var(--black50a);
+}
+
+.st-app-skin-picker {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    padding: 2px 0 6px;
+}
+
+.st-app-skin-card {
+    appearance: none;
+    -webkit-appearance: none;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 12px;
+    border-radius: var(--st-app-radius-m);
+    border: 1px solid var(--st-app-line);
+    background-color: var(--st-app-surface-2);
+    color: var(--st-app-fg);
+    cursor: pointer;
+    text-align: start;
+    transition: border-color 0.15s ease, transform 0.1s ease;
+}
+
+.st-app-skin-card:hover {
+    transform: translateY(-1px);
+}
+
+.st-app-skin-card.active {
+    border-color: var(--st-app-accent);
+    box-shadow: var(--st-app-focus-ring);
+}
+
+.st-app-skin-card-preview {
+    width: 100%;
+    height: 46px;
+    border-radius: var(--st-app-radius-s);
+    border: 1px solid var(--st-app-line-soft);
+    background:
+        linear-gradient(var(--st-app-line-soft), var(--st-app-line-soft)) 8px 10px / 30% 6px no-repeat,
+        linear-gradient(var(--st-app-line-soft), var(--st-app-line-soft)) 8px 20px / 24% 6px no-repeat,
+        color-mix(in srgb, var(--st-app-accent) 18%, var(--st-app-surface-2));
+}
+
+.st-app-skin-card-name {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.st-app-skin-card-tag {
+    font-size: 10px;
+    opacity: 0.6;
+}
+
+.st-app-segment {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.st-app-segment-btn {
+    appearance: none;
+    -webkit-appearance: none;
+    padding: 7px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--st-app-line);
+    background-color: transparent;
+    color: var(--st-app-fg);
+    font-size: 13px;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.15s ease, background-color 0.15s ease;
+}
+
+.st-app-segment-btn.active {
+    opacity: 1;
+    background-color: var(--st-app-accent-soft);
+    border-color: var(--st-app-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    body.st-app-on .st-app-char-card:hover,
+    .st-app-skin-card:hover {
+        transform: none;
+    }
+}
+
+/* ============================================================================
+ * 18. 视觉精修补充（v0.6.0）
+ * ========================================================================== */
+
+/* 页头发丝线分隔 */
+body.st-app-on .st-app-page-head {
+    border-bottom: 1px solid var(--st-app-line-soft);
+}
+
+/* 弹层顶部一条极淡高光（增加层次，零性能负担） */
+#st-app-sheet::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--st-app-line), transparent);
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+/* 激活 Tab：标签也跟着强调色 + 药丸过渡/按压 */
+.st-app-tab.active .st-app-tab-label {
+    color: var(--st-app-accent);
+}
+
+.st-app-tab-icon-wrap {
+    transition: background-color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+}
+
+.st-app-tab:active .st-app-tab-icon-wrap {
+    transform: scale(0.9);
+}
+
+/* 聊天列表加载骨架 */
+.st-app-skeleton-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+}
+
+.st-app-skeleton-avatar,
+.st-app-skeleton-line {
+    background: linear-gradient(90deg, var(--st-app-line-soft), var(--st-app-line), var(--st-app-line-soft));
+    background-size: 200% 100%;
+    animation: st-app-shimmer 1.3s ease-in-out infinite;
+    border-radius: var(--st-app-radius-s);
+}
+
+.st-app-skeleton-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    flex: none;
+}
+
+.st-app-skeleton-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.st-app-skeleton-line {
+    height: 12px;
+    width: 100%;
+}
+
+.st-app-skeleton-line.short {
+    width: 45%;
+}
+
+@keyframes st-app-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .st-app-skeleton-avatar,
+    .st-app-skeleton-line {
+        animation: none;
+        background: var(--st-app-line-soft);
+    }
+}
+
+/* ============================================================================
+ * 19. v0.7.0：顶栏/图标修正、原生二级统一顶栏、聊天加载层、穿透修复、FAB 适配
+ * ========================================================================== */
+
+/* 图标：直系 svg 也给尺寸/描边（兜底，避免未包 .st-app-ico 的注入图标变黑色大块） */
+.st-app-icon-btn > svg,
+.st-app-icon-btn .st-app-ico > svg,
+.st-app-fab > svg,
+.st-app-fab .st-app-ico > svg {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* 顶栏「更多」按钮做小一些 */
+.st-app-icon-btn-sm {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+}
+
+.st-app-icon-btn-sm > svg,
+.st-app-icon-btn-sm .st-app-ico > svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* 顶栏角色名溢出截断（已 ellipsis，再加固 title 提示） */
+.st-app-chat-id-name,
+.st-app-chat-id-sub {
+    max-width: 100%;
+}
+
+/* 聊天加载层（点击即进入时显示，盖在消息区上方、顶栏下方） */
+.st-app-chat-loading {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(var(--st-app-topbar-h) + var(--st-app-safe-t));
+    bottom: 0;
+    z-index: 10014;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background-color: var(--st-app-solid, var(--st-app-tint));
+    color: var(--st-app-fg);
+}
+
+.st-app-chat-loading.show {
+    display: flex;
+}
+
+.st-app-chat-loading-spin {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 3px solid var(--st-app-line);
+    border-top-color: var(--st-app-accent);
+    animation: st-app-spin 0.8s linear infinite;
+}
+
+.st-app-chat-loading-text {
+    font-size: 13px;
+    opacity: 0.7;
+}
+
+@keyframes st-app-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .st-app-chat-loading-spin { animation: none; }
+}
+
+/* ============================================================================
+ * 19. v0.7.4：原生二级界面改为「统一二级页覆盖层」方案
+ * 原生抽屉/扩展面板的内容被搬进 #st-app-native-page（root 级，自带返回+标题），
+ * 不再使用 body 级悬浮顶栏、不再抬升 #top-settings-holder 层级。
+ * ========================================================================== */
+
+/* 二级层不透明 backing：修复毛玻璃/透明主题下「二级界面看到一级菜单」的穿透 */
+#st-app-subpage,
+#st-app-sheet {
+    background-color: var(--st-app-solid, var(--st-app-surface-3));
+}
+
+#st-app-subpage {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+}
+
+/* FAB 图标适配（之前直接注入 svg 未受限） + 配色对比 */
+.st-app-fab > svg,
+.st-app-fab .st-app-ico > svg {
+    width: 26px;
+    height: 26px;
+    stroke-width: 2;
+}
+
+.st-app-fab {
+    color: var(--st-app-on-accent-strong, var(--st-app-fg));
+}
+
+.st-app-tab.active .st-app-tab-icon-wrap {
+    color: var(--st-app-on-accent-strong, var(--st-app-fg));
+}
+
+/* 一级主页右下不再显示版本角标（聊天页头部 chip 仍保留） */
+#st-app-version-badge {
+    display: none !important;
+}
+
+/* ============================================================================
+ * 20. v0.7.1：原生二级界面统一顶栏 / ⋯ 尺寸 / 设置行高度
+ * ========================================================================== */
+
+/* ⋯ 按钮再大 20%（34px → 38px，图标 18 → 21） */
+.st-app-icon-btn-sm {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+}
+
+.st-app-icon-btn-sm > svg,
+.st-app-icon-btn-sm .st-app-ico > svg {
+    width: 21px;
+    height: 21px;
+}
+
+/* 设置行/分组高度不被 flex 挤压（修「设置按钮框框高度截断」） */
+.st-app-group {
+    flex: none;
+    align-items: stretch;
+}
+
+.st-app-row {
+    flex: none;
+    height: auto;
+    box-sizing: border-box;
+    overflow: visible;
+}
+
+/* 二级层（UI 主题等）里的行同样不被挤压 */
+.st-app-subpage-body .st-app-group,
+.st-app-subpage-body .st-app-row {
+    flex: none;
+    height: auto;
+}
+
+/* ============================================================================
+ * 21. v0.7.3：聊天条目「⋮」操作
+ * ========================================================================== */
+
+/* 聊天条目改为 div（允许内部按钮），手指光标保持不变 */
+.st-app-chat-item {
+    cursor: pointer;
+    position: relative;
+    user-select: none;
+}
+
+/* 竖三点按钮：不超出条目高度 */
+.st-app-chat-dots {
+    appearance: none;
+    -webkit-appearance: none;
+    flex: 0 0 auto;
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    padding: 0;
+    margin-left: 2px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--st-app-fg);
+    opacity: 0.55;
+    cursor: pointer;
+    transition: opacity 0.15s ease, background-color 0.15s ease;
+}
+
+.st-app-chat-dots:hover {
+    opacity: 1;
+    background-color: color-mix(in srgb, var(--st-app-surface) 55%, var(--st-app-fg) 10%);
+}
+
+.st-app-chat-dots .st-app-ico {
+    width: 20px;
+    height: 20px;
+}
+
+.st-app-chat-dots .st-app-ico svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* 置顶标记 */
+.st-app-chat-pin {
+    flex: 0 0 auto;
+    font-size: 10px;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background-color: var(--st-app-accent-soft);
+    color: var(--st-app-accent);
+    margin-left: 4px;
+}
+
+/* ⋮ 弹窗内容 */
+.st-app-chatmenu-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 2px 4px 10px;
+}
+
+.st-app-chatmenu-info {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.st-app-chatmenu-actions {
+    display: flex;
+    gap: 10px;
+    padding: 10px 2px 2px;
+}
+
+.st-app-chatmenu-actions .st-app-btn {
+    flex: 1 1 0;
+    min-height: 46px;
+    font-size: 15px;
+}
+
+/* 危险按钮（删除） */
+.st-app-btn-danger {
+    border-color: color-mix(in srgb, var(--crimson70a) 70%, transparent);
+    background-color: color-mix(in srgb, var(--crimson70a) 22%, transparent);
+    color: var(--SmartThemeBodyColor);
+}
+
+.st-app-btn-danger:hover {
+    background-color: color-mix(in srgb, var(--crimson70a) 36%, transparent);
+}
+
+/* ============================================================================
+ * 22. v0.7.4：统一二级页覆盖层（原生抽屉/扩展面板内容搬入，自带返回+标题）
+ * ========================================================================== */
+
+#st-app-native-page {
+    position: absolute;
+    inset: 0;
+    z-index: 10025;
+    display: none;
+    flex-direction: column;
+    pointer-events: auto;
+    background-color: var(--st-app-solid, var(--st-app-surface-1));
+    color: var(--st-app-fg);
+    text-align: start;
+}
+
+#st-app-native-page.open {
+    display: flex;
+}
+
+.st-app-native-page-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+    padding: calc(var(--st-app-safe-t) + 4px) calc(var(--st-app-safe-r) + 8px) 6px calc(var(--st-app-safe-l) + 8px);
+    border-bottom: 1px solid var(--st-app-line);
+    background-color: var(--st-app-solid, var(--st-app-surface-1));
+    color: var(--st-app-fg);
+}
+
+.st-app-native-page-head .st-app-page-title {
+    font-size: 18px;
+}
+
+.st-app-native-page-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 10px 12px calc(var(--st-app-safe-b) + 24px);
+}
+
+/* 被搬进来的原生面板内容：还原成普通流式布局（不用原生 fixed/absolute），
+ * 用 relative 而非 static —— 面板内部的 position:absolute 子元素依赖最近定位祖先。 */
+.st-app-embedded-panel {
+    position: relative !important;
+    inset: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    transform: none !important;
+    overflow: visible !important;
+}
+
+/* 整个 .drawer 被搬入时：整体静态化，隐藏其顶部 toggle 行，内容保持可见可点 */
+.st-app-embedded-drawer {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+}
+
+.st-app-embedded-drawer > .drawer-toggle {
+    display: none !important;
+}
+
+.st-app-embedded-drawer > .drawer-content {
+    position: relative !important;
+    inset: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    transform: none !important;
+    overflow: visible !important;
+}
+
+/* 原生面板内的次级滚动画布交给页面体滚动 */
+.st-app-native-page-body :is(.flex-container, .text_pole, select, input, textarea) {
+    max-width: 100%;
+}

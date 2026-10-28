@@ -1,0 +1,17 @@
+<!-- 酒馆 APP 布局 · 原生扩展设置面板（挂在 Extensions 抽屉里，任何时候都能进） -->
+<div class="inline-drawer">
+    <div class="inline-drawer-toggle inline-drawer-header">
+        <b><i class="fa-solid fa-table-columns"></i> 酒馆 APP 布局</b>
+        <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+    </div>
+    <div class="inline-drawer-content">
+        <div class="flex-container flexFlowColumn">
+            <div class="checkbox justifyLeft">
+                <input type="checkbox" id="st_app_layout_enable" />
+                <label for="st_app_layout_enable">启用 APP 布局（底部 Tab / 二级页面）</label>
+            </div>
+            <small class="opacity70pct">关闭后完全恢复酒馆原生界面。窄屏下若界面异常，可在此取消勾选，或在地址栏加 <code>?st_app_layout=off</code> 强制原版。</small>
+            <small class="opacity70pct">v0.8.6 — 修 ⋯/设置「未找到插件面板」：openPanelSubpage 兼容带 # 的 id（之前 getElementById('#xxx') 返回 null）；id 失效时按标题兜底查找；无 id 扩展用确定性 slug id（不再随机漂移）。</small>
+        </div>
+    </div>
+</div>
