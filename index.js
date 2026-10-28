@@ -13,11 +13,12 @@
  * ============================================================================ */
 
 const MODULE = 'st_app_layout';
-const VERSION = '0.8.6';
-const STAGE = 'Stage 2 + 主题';
+const VERSION = '0.9.0';
+const STAGE = 'Stage 2 + 主题 + TauriTavern 兼容';
 
-/* Stage 2/3：新建聊天 + 角色历史会话数 + 右栏菜单切换（script.js 公开导出；Third-party 扩展同路径引用是 ST 通行做法） */
-import { doNewChat, getPastCharacterChats, select_selected_character, selectRightMenuWithAnimation } from '../../../../script.js';
+/* Stage 2/3：新建聊天 + 角色历史会话数 + 右栏菜单切换（script.js 公开导出；Third-party 扩展同路径引用是 ST 通行做法）
+ * isChatSaving：1.18/1.19 均导出（live binding），TauriTavern 保存队列较慢，切角色前必须等它变 false */
+import { doNewChat, getPastCharacterChats, select_selected_character, selectRightMenuWithAnimation, isChatSaving } from '../../../../script.js';
 
 /* ---------- inline SVG 线条图标（不用 emoji，不用 Font Awesome） ---------- */
 const ICONS = {
@@ -649,10 +650,15 @@ function watchExtensionList() {
         clearTimeout(timer);
         timer = setTimeout(safe('ext-list-sync', () => {
             if (!state.enabled || state.tab !== 'settings' || state.view !== 'tabs') return;
+            // 忽略「我们自己的搬动/还原」引起的 childList 变化（搬出再搬回不是真正的扩展增删），
+            // 否则退出扩展面板时设置列表会闪动（消失再刷新）
+            if (Date.now() - lastPanelMoveAt < 1200) return;
+            const np = document.getElementById('st-app-native-page');
+            if (np && np.classList.contains('open')) return; // 覆盖层开着时不刷
             const page = document.getElementById('st-app-settings-list');
             if (!page || !page.offsetParent) return; // 设置页不可见就不刷
             renderSettingsList();
-        }), 250);
+        }), 300);
     };
     const obs = new MutationObserver(debounced);
     for (const sel of ['#extensions_settings', '#extensions_settings2']) {
@@ -1012,13 +1018,31 @@ async function startChatWithGreeting(chid, index) {
         ctx.loader?.show?.();
         // 若目标角色已是当前角色，跳过重新加载，避免多生成一次空聊天
         if (String(ctx.characterId) !== String(chid)) {
+            await waitChatNotSaving(ctx);
             await ctx.selectCharacterById(chid, { switchMenu: false });
         }
         if (typeof doNewChat === 'function') {
             await doNewChat({ deleteCurrentChat: false });
         }
         await applyGreeting(index);
-        enterChatView();
+        // 显式传 meta：新聊天时 ctx 时序在部分环境（如 TauriTavern）可能取不到
+        // characters[characterId]，导致顶栏无头像无卡名 —— 用已选中的角色卡补全
+        let meta = null;
+        try {
+            const ch = ctx.characters && ctx.characters[chid];
+            if (ch) {
+                const avatarFile = ch.avatar && ch.avatar !== 'none' ? ch.avatar : '';
+                meta = {
+                    kind: 'char',
+                    chid,
+                    name: ch.name || '',
+                    sub: stripExt((typeof ctx.getCurrentChatId === 'function' && ctx.getCurrentChatId()) || ''),
+                    avatarFile,
+                    avatarUrl: avatarFile ? ctx.getThumbnailUrl('avatar', avatarFile) : '',
+                };
+            }
+        } catch { /* noop */ }
+        enterChatView({ meta });
         setTimeout(() => { try { ctx.scrollChatToBottom?.(); } catch { /* noop */ } }, 300);
     } catch (e) {
         reportError('开始聊天失败', e);
@@ -2128,6 +2152,18 @@ function stripPreview(mes) {
  * 打开聊天 → 进入聊天二级页
  * ========================================================================== */
 
+/* 等待聊天保存队列清空（TauriTavern 的 enqueueChatSave 串行队列可能较慢；
+ * ST 的 selectCharacterById 在 isChatSaving 时会静默 return → 必须先等）
+ * isChatSaving 是 script.js 的 live binding 导出（1.18/1.19 均有）。 */
+async function waitChatNotSaving(_ctx, timeoutMs = 4000) {
+    const start = Date.now();
+    while (isChatSaving === true) {
+        if (Date.now() - start > timeoutMs) return false;
+        await new Promise((r) => setTimeout(r, 80));
+    }
+    return true;
+}
+
 async function openChat(item, meta) {
     if (state.opening) return;
     state.opening = true;
@@ -2143,15 +2179,38 @@ async function openChat(item, meta) {
             const chid = meta.chid;
             if (chid < 0) throw new Error('找不到这条聊天对应的角色（角色可能已被删除）');
             const target = String(item.file_id || '');
-            // 原生欢迎屏 openRecentCharacterChat 同款路径：
-            // 先选角色（内部加载该角色「当前」聊天），再比对目标聊天名，
-            // 不同则 openCharacterChat 切到目标 —— 保证同一角色多条对话各自独立。
-            // 不再预写 chat 指针（之前的优化会导致同角色多条对话都指向最新那条）。
+            // TauriTavern 兼容：先等保存队列清空，避免 selectCharacterById 因 isChatSaving 静默早退
+            await waitChatNotSaving(ctx);
+            // 原生欢迎屏 openRecentCharacterChat 同款路径（多对话各自独立）：
             await ctx.selectCharacterById(chid, { switchMenu: false });
+            // 验证角色真的切过去了（ST 对无效 id / 保存中会静默 return → 可检测）
+            let switched = String(ctx && ctx.characterId) === String(chid);
+            if (!switched) {
+                // 可能正在保存：等一拍再重试一次
+                await waitChatNotSaving(ctx, 2000);
+                await new Promise((r) => setTimeout(r, 150));
+                await ctx.selectCharacterById(chid, { switchMenu: false });
+                switched = String(ctx && ctx.characterId) === String(chid);
+            }
+            if (!switched) throw new Error('角色切换未完成（可能正在保存，请稍后重试）');
+            // 对齐原生流程的持久化两步（存在才调，1.18/1.19/TT 都安全）
+            try {
+                const av = ctx.characters && ctx.characters[chid] && ctx.characters[chid].avatar;
+                if (av && typeof ctx.setActiveCharacter === 'function') ctx.setActiveCharacter(av);
+                if (typeof ctx.saveSettingsDebounced === 'function') ctx.saveSettingsDebounced();
+            } catch { /* noop */ }
             const cur = typeof ctx.getCurrentChatId === 'function' ? ctx.getCurrentChatId() : null;
             if (cur !== target && typeof ctx.openCharacterChat === 'function') {
                 await ctx.openCharacterChat(target);
             }
+            // 验证真的加载到目标聊天（不能相信 ST 的静默空聊天 / TT 的失败吞错）
+            let loaded = typeof ctx.getCurrentChatId === 'function' ? ctx.getCurrentChatId() : null;
+            if (loaded !== target) {
+                await new Promise((r) => setTimeout(r, 250));
+                if (typeof ctx.openCharacterChat === 'function') await ctx.openCharacterChat(target);
+                loaded = typeof ctx.getCurrentChatId === 'function' ? ctx.getCurrentChatId() : null;
+            }
+            if (loaded !== target) throw new Error('聊天加载未完成（服务器未返回目标聊天，可能角色目录不一致）');
         }
         enterChatView({ meta }); // 数据就绪，刷新顶栏（仍以点开的聊天为准）
         setTimeout(() => { try { ctx.scrollChatToBottom && ctx.scrollChatToBottom(); } catch { /* noop */ } }, 220);
@@ -2435,12 +2494,15 @@ function closeSheet() {
  * ========================================================================== */
 
 let movedNativeElement = null;
+/* 最近一次我们自己搬动/还原面板的时间戳（用于抑制扩展列表同步引起的闪动） */
+let lastPanelMoveAt = 0;
 
 /** 还原搬进统一二级页的元素（含类名与原生抽屉关闭） */
 function restoreNativeElement() {
     const m = movedNativeElement;
     if (!m) return;
     movedNativeElement = null;
+    lastPanelMoveAt = Date.now();
     try {
         const el2 = m.element;
         el2.classList.remove('st-app-embedded-panel', 'st-app-embedded-drawer');
@@ -2494,6 +2556,7 @@ function openNativePageElement(element, title, kind, drawerEl) {
     const bodyEl = document.getElementById('st-app-native-page-body');
     if (!page || !bodyEl || !element) return;
     restoreNativeElement();
+    lastPanelMoveAt = Date.now();
     const isDrawer = (kind === 'drawer');
     const contentEl = isDrawer ? element.querySelector('.drawer-content') : null;
     movedNativeElement = {
